@@ -37,7 +37,10 @@
 	<button id="previous-tag">previous tag</button>
 	<button id="next-tag">next tag</button>
 	<button id="next-image">next image</button>
-
+	<button id="accept-predictions">accept predictions</button>
+	<button id="reject-predictions">reject predictions</button>
+	<p> accept predictions by default?</p>
+	<input id="toggle-default-accept-predictions" type="checkbox"></input>
 
 <script>
 
@@ -64,6 +67,7 @@ boxes.map(b => b.bounds = nj.array(b.bounds))
 function selectBox(i)
 {
 	selectedBox = i
+	boxes[i].isPrediction = false
 	render()
 }
 function setTag(newTag)
@@ -95,6 +99,8 @@ function nextTag()
 
 function submitAnnotation(callback)
 {
+	mustAcceptPredictionByDefault() ? acceptPredictions() : removePredictions()
+
 	$.ajax({url: "/annotation",
 		type: 'post',
 		data: JSON.stringify({annotation: {
@@ -180,6 +186,16 @@ function nextImage()
 	loadImage(nextImage)
 }
 
+function mustAcceptPredictionByDefault(value)
+{
+	if(value === undefined) return window.localStorage.mustAcceptPredictions === "true";
+
+	window.localStorage.mustAcceptPredictions = value ? "true" : "false";
+
+	return value;
+}
+
+
 function submitAndNext()
 {
 	submitAnnotation(nextImage)
@@ -191,6 +207,18 @@ function submitAndPrevious()
 	submitAnnotation(previousImage)
 }
 
+function removePredictions()
+{
+	boxes = boxes.filter(x => !x.isPrediction)
+	render()
+}
+
+function acceptPredictions()
+{
+	boxes.map(x => x.isPrediction = false)
+	render()
+}
+
 document.getElementById('current-tag').onchange = function() { setTag(this.value) };
 document.getElementById('set-tag').onclick = function() { setTag(tags[selectedTag]) };
 
@@ -200,11 +228,49 @@ document.getElementById('previous-image').onclick = submitAndPrevious;
 document.getElementById('next-tag').onclick = nextTag;
 document.getElementById('previous-tag').onclick = previousTag;
 
+document.getElementById('toggle-default-accept-predictions').checked = mustAcceptPredictionByDefault()
+document.getElementById('toggle-default-accept-predictions').onclick = function()
+{
+	mustAcceptPredictionByDefault(this.checked)
+}
+
+document.getElementById('accept-predictions').onclick = acceptPredictions
+document.getElementById('reject-predictions').onclick = removePredictions
+
+window.onkeypress = function(event) {
+    switch(String.fromCharCode(event.charCode))
+    {
+    	case 'a':
+    		submitAndPrevious();
+    		return;
+    	case 'd':
+    		submitAndNext();
+    		return;
+
+    	case 'w':
+    		nextTag();
+    		return;
+
+    	case 's':
+    		previousTag();
+    		return;
+
+    	case 'q':
+    		removePredictions();
+    		return;
+
+    	case 'e':
+    		acceptPredictions();
+    		return;
+    }
+}
+
 
 function moveBox(i, p)
 {
 	var box = boxes[i];
 	box.bounds.add(nj.stack([p,p]), false)
+	box.isPrediction = false;
 
 	render();
 }
@@ -221,6 +287,7 @@ function resizeBottomRight(i, p)
 {
 	var box = boxes[i];
 	box.bounds.add(nj.stack([nj.zeros(2), p]), false)
+	box.isPrediction = false;
 
 	render();
 }
@@ -231,6 +298,7 @@ function resizeBottomLeft(i, p)
 	var box = boxes[i];
 
 	box.bounds.add(nj.array([[p.get(0), 0],[0, p.get(1)]]), false)
+	box.isPrediction = false;
 
 	render();
 }
@@ -240,6 +308,7 @@ function resizeLeft(i, p)
 	var box = boxes[i];
 
 	box.bounds.add(nj.array([[p.get(0), 0],[0, 0]]), false)
+	box.isPrediction = false;
 
 	render();
 }
@@ -249,6 +318,7 @@ function resizeRight(i, p)
 	var box = boxes[i];
 
 	box.bounds.add(nj.array([[0, 0],[p.get(0), 0]]), false)
+	box.isPrediction = false;
 
 	render();
 }
@@ -260,6 +330,7 @@ function resizeTop(i, p)
 	var box = boxes[i];
 
 	box.bounds.add(nj.array([[0, p.get(1)],[0, 0]]), false)
+	box.isPrediction = false;
 
 	render();
 }
@@ -269,6 +340,7 @@ function resizeBottom(i, p)
 	var box = boxes[i];
 
 	box.bounds.add(nj.array([[0, 0],[0, p.get(1)]]), false)
+	box.isPrediction = false;
 
 	render();
 }
@@ -278,6 +350,7 @@ function resizeTopLeft(i, p)
 {
 	var box = boxes[i];
 	box.bounds.add(nj.stack([p, nj.zeros(2)]), false)
+	box.isPrediction = false;
 
 	render();
 }
@@ -286,6 +359,7 @@ function resizeTopRight(i, p)
 {
 	var box = boxes[i];
 	box.bounds.add(nj.array([[0, p.get(1)],[p.get(0), 0]]), false)
+	box.isPrediction = false;
 
 	render();
 }
@@ -385,7 +459,8 @@ function boundingBoxes(mountNode, boundingBoxes)
 		.attr('y', d => d.bounds.slice(null, [1, 2]).min())
 		.attr('width', d => Math.abs(d.bounds.get(0, 0) - d.bounds.get(1, 0)))
 		.attr('height', d =>  Math.abs(d.bounds.get(0, 1) - d.bounds.get(1, 1)))
-		.attr('stroke', (d, i) => i == selectedBox ? "blue" : "black");
+		.attr('stroke', (d, i) => i == selectedBox ? "blue" :
+			(d.isPrediction ? "red" : "black"));
 
 	var RESIZE_CONTROL_WIDTH = 5;
 	dynamicProperties.select('.topLeft')
@@ -450,14 +525,6 @@ function boundingBoxes(mountNode, boundingBoxes)
 		.attr('y', d => d.bounds.slice(null, [1, 2]).min() - 10);
 
 	match.exit().remove();
-
-
-// 		.attr("x", function(d) { return d.cx; })
-// 4.attr("y", function(d) { return d.cy; })
-// 5.text( function (d) { return "( " + d.cx + ", " + d.cy +" )"; })
-// 6.attr("font-family", "sans-serif")
-// 7.attr("font-size", "20px")
-// 8.attr("fill", "red");
 
 }
 

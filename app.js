@@ -1,5 +1,7 @@
 var config = require('./config')
 var fs = require('fs')
+var request = require('request');
+var path = require('path');
 var express = require('express')
 var bodyParser = require('body-parser');
 var app = express()
@@ -115,7 +117,10 @@ function loadBoxesFromAnnotation(fileBase, callback)
 	var filePath = config.annotationPath + fileBase + '.xml'
 
 	if (!fs.existsSync(filePath)) {
-		callback([])
+		var imageFilePath = config.imagePath + fileBase + '.jpg'
+
+		requestPrediction(imageFilePath, callback)
+
 		return
 	};
 
@@ -147,6 +152,91 @@ function parsedAnnotationToBoxes(parsedContents)
 
 	return boxes
 }
+
+function requestPrediction(imageFilePath, callback)
+{
+	if(config.predictionApi === '' || config.predictionApi === undefined)
+	{
+		callback([]);
+		return;
+	}
+
+	var target = config.predictionApi;
+
+	var rs = fs.createReadStream(imageFilePath);
+	var ws = request.post(target, function(error, response, body) {
+
+		console.dir(error)
+		console.dir(response)
+		console.dir(body)
+
+		xml2js.parseString(body, (err, parsedContents) => {
+			if(err) console.dir(err)
+
+			var boxes = parsedAnnotationToBoxes(parsedContents);
+			boxes.map(b => b.isPrediction = true)
+			callback(boxes)
+		});
+	});
+
+	ws.on('drain', function () {
+		console.log('drain', new Date());
+		rs.resume();
+	});
+
+	rs.on('end', function () {
+		console.log('uploaded to ' + target);
+	});
+
+	ws.on('error', function (err) {
+		console.error('cannot send file to ' + target + ': ' + err);
+	});
+
+	rs.pipe(ws);
+}
+
+function mockPrediction()
+{
+
+
+	var prediction = `
+<annotation>
+	<folder>less_selected</folder>
+	<filename>undefined</filename>
+	<size>
+		<width>undefined</width>
+		<height>undefined</height>
+	</size>
+	<segmented>0</segmented>
+	<object>
+		<name>Mocked</name>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<difficult>0</difficult>
+		<bndbox>
+			<xmin>100</xmin>
+			<ymin>200</ymin>
+			<xmax>300</xmax>
+			<ymax>400</ymax>
+		</bndbox>
+	</object>
+	<object>
+		<name>Mocked2</name>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<difficult>0</difficult>
+		<bndbox>
+			<xmin>400</xmin>
+			<ymin>500</ymin>
+			<xmax>600</xmax>
+			<ymax>700</ymax>
+		</bndbox>
+	</object>
+</annotation>`
+
+	return prediction
+}
+
 
 
 app.post('/annotation', function(req, res) {
@@ -183,6 +273,20 @@ app.get('/', function (req, res) {
 	})
   })
 })
+
+app.post('/mockPrediction', function (req, res) {
+  var filename = './temp.jpg';
+  var dst = fs.createWriteStream(filename);
+  req.pipe(dst);
+  dst.on('drain', function() {
+    console.log('drain', new Date());
+    req.resume();
+  });
+  req.on('end', function () {
+    res.send(mockPrediction());
+  });
+});
+
 
 
 app.listen(port, () => console.log(`Annotation app listening on port ${port}!`))
