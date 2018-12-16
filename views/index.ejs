@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+#imageContainer {
+	width: 800px;
+	height: 500px;
+}
+
+.resizer {
+	fill: 'black';
+	stroke: 'black';
+}
+
+.outline {
+	stroke-width: 2px;
+	fill-opacity: 0;
+}
+
+.close {
+	font-family:"helvetica";
+	font-size:"20px";
+	fill:"black";
+}
+
+
+</style>
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/nicolaspanel/numjs@0.15.1/dist/numjs.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+</head>
+<body>
+	<svg id="imageContainer"/>
+	<select id="current-tag"></select>
+	<button id="set-tag">set tag</button>
+	<button id="previous-image">previous image</button>
+	<button id="previous-tag">previous tag</button>
+	<button id="next-tag">next tag</button>
+	<button id="next-image">next image</button>
+
+
+<script>
+
+var tags = <%- JSON.stringify(tags) %>
+var selectedTag = 0;
+var selectedBox = -1;
+
+tags.map((name, i) => {
+	var option = document.createElement('option')
+	option.text = name
+	option.value = name
+
+	if(i == selectedTag) {
+		option.selected = true
+	}
+	document.getElementById('current-tag').add(option)
+})
+
+var boxes = <%- JSON.stringify(boxes) %>
+addImageToHistory(<%- JSON.stringify(imageSource) %>)
+
+boxes.map(b => b.bounds = nj.array(b.bounds))
+
+function selectBox(i)
+{
+	selectedBox = i
+	render()
+}
+function setTag(newTag)
+{
+	selectedTag = tags.indexOf(newTag)
+
+	if(selectedBox >= 0 && selectedBox < boxes.length) {
+		boxes[selectedBox].name = tags[selectedTag]
+		render()
+	}
+}
+
+function previousTag()
+{
+	selectedTag--;
+	if (selectedTag < 0) selectedTag = tags.length -1;
+
+	document.getElementById('current-tag').value = tags[selectedTag]
+}
+
+function nextTag()
+{
+	selectedTag++;
+	if (selectedTag >=  tags.length) selectedTag = 0;
+
+	document.getElementById('current-tag').value = tags[selectedTag]
+}
+
+
+function submitAnnotation(callback)
+{
+	$.ajax({url: "/annotation",
+		type: 'post',
+		data: JSON.stringify({annotation: {
+		fileBase: <%- JSON.stringify(imageSource)%>,
+		objects: boxes.map(x => {
+			return {
+				name: x.name,
+				bounds: x.bounds.tolist()
+			}
+		})
+
+		}}),
+		success: callback,
+  		dataType: 'json',
+  		contentType: 'application/json'
+  		// dataType: 'json',
+  		// contentType: "application/json; charset=utf-8"
+  	});
+}
+
+
+function getHistoryState()
+{
+	if(!window.localStorage.history) {
+		setHistoryState({
+			currentImage: 0,
+			history: [<%- JSON.stringify(imageSource)%>]
+		});
+	}
+
+	var state = JSON.parse(window.localStorage.history);
+
+	return state;
+}
+
+function setHistoryState(state)
+{
+	window.localStorage.history = JSON.stringify(state);
+}
+
+function addImageToHistory(imageSource)
+{
+	if(!imageSource) return;
+
+ 	var state = getHistoryState();
+	state.history[state.currentImage] = imageSource;
+	setHistoryState(state);
+}
+
+function loadImage(image)
+{
+	if(!image) {
+		window.location.href = 'http://' + window.location.host
+		return
+	}
+
+	window.location.href = 'http://' + window.location.host + '/?imageSource=' + image
+	return
+}
+
+function previousImage()
+{
+	var state = getHistoryState();
+	state.currentImage--;
+	if(state.currentImage < 0) state.currentImage = 0;
+	setHistoryState(state)
+
+	var previousImage = state.history[state.currentImage];
+	console.log('loading: ' + previousImage)
+
+	loadImage(previousImage)
+}
+
+
+function nextImage()
+{
+	var state = getHistoryState();
+	state.currentImage++;
+	setHistoryState(state)
+
+	var nextImage = state.history[state.currentImage];
+
+	loadImage(nextImage)
+}
+
+function submitAndNext()
+{
+	submitAnnotation(nextImage)
+}
+
+function submitAndPrevious()
+{
+	console.log('SUBMIT AND PREVIOUS')
+	submitAnnotation(previousImage)
+}
+
+document.getElementById('current-tag').onchange = function() { setTag(this.value) };
+document.getElementById('set-tag').onclick = function() { setTag(tags[selectedTag]) };
+
+document.getElementById('next-image').onclick = submitAndNext;
+document.getElementById('previous-image').onclick = submitAndPrevious;
+
+document.getElementById('next-tag').onclick = nextTag;
+document.getElementById('previous-tag').onclick = previousTag;
+
+
+function moveBox(i, p)
+{
+	var box = boxes[i];
+	box.bounds.add(nj.stack([p,p]), false)
+
+	render();
+}
+
+function deleteBox(i, p)
+{
+	boxes.splice(i, 1);
+
+	render();
+}
+
+
+function resizeBottomRight(i, p)
+{
+	var box = boxes[i];
+	box.bounds.add(nj.stack([nj.zeros(2), p]), false)
+
+	render();
+}
+
+
+function resizeBottomLeft(i, p)
+{
+	var box = boxes[i];
+
+	box.bounds.add(nj.array([[p.get(0), 0],[0, p.get(1)]]), false)
+
+	render();
+}
+
+function resizeLeft(i, p)
+{
+	var box = boxes[i];
+
+	box.bounds.add(nj.array([[p.get(0), 0],[0, 0]]), false)
+
+	render();
+}
+
+function resizeRight(i, p)
+{
+	var box = boxes[i];
+
+	box.bounds.add(nj.array([[0, 0],[p.get(0), 0]]), false)
+
+	render();
+}
+
+
+
+function resizeTop(i, p)
+{
+	var box = boxes[i];
+
+	box.bounds.add(nj.array([[0, p.get(1)],[0, 0]]), false)
+
+	render();
+}
+
+function resizeBottom(i, p)
+{
+	var box = boxes[i];
+
+	box.bounds.add(nj.array([[0, 0],[0, p.get(1)]]), false)
+
+	render();
+}
+
+
+function resizeTopLeft(i, p)
+{
+	var box = boxes[i];
+	box.bounds.add(nj.stack([p, nj.zeros(2)]), false)
+
+	render();
+}
+
+function resizeTopRight(i, p)
+{
+	var box = boxes[i];
+	box.bounds.add(nj.array([[0, p.get(1)],[p.get(0), 0]]), false)
+
+	render();
+}
+
+
+
+function enterBox(match)
+{
+	var boxDrag = d3.drag()
+	.on("drag", function (d, i) {
+		moveBox(i, [d3.event.dx, d3.event.dy]);
+	});
+
+	var dragTopLeft = d3.drag().on("drag", (d, i) => resizeTopLeft(i, nj.array([d3.event.dx, d3.event.dy])))
+	var dragTopRight = d3.drag().on("drag", (d, i) => resizeTopRight(i, nj.array([d3.event.dx, d3.event.dy])))
+
+	var dragBottomRight = d3.drag().on("drag", (d, i) => resizeBottomRight(i, nj.array([d3.event.dx, d3.event.dy])))
+	var dragBottomLeft = d3.drag().on("drag", (d, i) => resizeBottomLeft(i, nj.array([d3.event.dx, d3.event.dy])))
+
+	var dragRight = d3.drag().on("drag", (d, i) => resizeRight(i, nj.array([d3.event.dx, d3.event.dy])))
+	var dragLeft = d3.drag().on("drag", (d, i) => resizeLeft(i, nj.array([d3.event.dx, d3.event.dy])))
+
+	var dragTop = d3.drag().on("drag", (d, i) => resizeTop(i, nj.array([d3.event.dx, d3.event.dy])))
+	var dragBottom = d3.drag().on("drag", (d, i) => resizeBottom(i, nj.array([d3.event.dx, d3.event.dy])))
+
+
+	var boxContainer = match.enter()
+		.append('g')
+		.attr('class', 'boundingBox');
+
+	boxContainer.append('rect')
+		.attr('class', 'outline')
+		.call(boxDrag)
+		.on('click', function(d, i) {
+			selectBox(i)
+		})
+
+
+	boxContainer.append('rect')
+		.attr('class', 'topLeft resizer')
+		.call(dragTopLeft);
+
+	boxContainer.append('rect')
+		.attr('class', 'topRight resizer')
+		.call(dragTopRight);
+
+
+	boxContainer.append('rect')
+		.attr('class', 'bottomLeft resizer')
+		.call(dragBottomLeft);
+
+	boxContainer.append('rect')
+		.attr('class', 'bottomRight resizer')
+		.call(dragBottomRight);
+
+	boxContainer.append('rect')
+		.attr('class', 'left resizer')
+		.call(dragLeft);
+
+	boxContainer.append('rect')
+		.attr('class', 'right resizer')
+		.call(dragRight);
+
+	boxContainer.append('rect')
+		.attr('class', 'top resizer')
+		.call(dragTop);
+
+	boxContainer.append('rect')
+		.attr('class', 'bottom resizer')
+		.call(dragBottom);
+
+
+	boxContainer.append('text')
+		.attr('class', 'tag')
+
+	boxContainer.append('text')
+		.attr('class', 'close')
+		.text('X')
+		.on('click', (d, i) => deleteBox(i));
+
+	return boxContainer;
+}
+
+
+function boundingBoxes(mountNode, boundingBoxes)
+{
+	var match = mountNode
+		.selectAll('.boundingBox')
+		.data(boundingBoxes)
+
+	var boxEnter = enterBox(match);
+
+	var dynamicProperties = match.merge(boxEnter);
+
+	dynamicProperties.select('.outline')
+		.attr('x', d => d.bounds.slice(null, [0, 1]).min())
+		.attr('y', d => d.bounds.slice(null, [1, 2]).min())
+		.attr('width', d => Math.abs(d.bounds.get(0, 0) - d.bounds.get(1, 0)))
+		.attr('height', d =>  Math.abs(d.bounds.get(0, 1) - d.bounds.get(1, 1)))
+		.attr('stroke', (d, i) => i == selectedBox ? "blue" : "black");
+
+	var RESIZE_CONTROL_WIDTH = 5;
+	dynamicProperties.select('.topLeft')
+		.attr('x', d => d.bounds.get(0, 0) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('y', d => d.bounds.get(0, 1) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('width', d => RESIZE_CONTROL_WIDTH)
+		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
+
+	dynamicProperties.select('.topRight')
+		.attr('x', d => d.bounds.get(1, 0) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('y', d => d.bounds.get(0, 1) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('width', d => RESIZE_CONTROL_WIDTH)
+		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
+
+	dynamicProperties.select('.bottomRight')
+		.attr('x', d => d.bounds.get(1, 0) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('y', d => d.bounds.get(1, 1) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('width', d => RESIZE_CONTROL_WIDTH)
+		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
+
+	dynamicProperties.select('.bottomLeft')
+		.attr('x', d => d.bounds.get(0, 0) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('y', d => d.bounds.get(1, 1) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('width', d => RESIZE_CONTROL_WIDTH)
+		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
+
+
+	dynamicProperties.select('.right')
+		.attr('x', d => d.bounds.get(1, 0) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('y', d => .5 * (d.bounds.get(0, 1) + d.bounds.get(1, 1)) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('width', d => RESIZE_CONTROL_WIDTH)
+		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
+
+	dynamicProperties.select('.left')
+		.attr('x', d => d.bounds.get(0, 0) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('y', d => .5 * (d.bounds.get(0, 1) + d.bounds.get(1, 1)) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('width', d => RESIZE_CONTROL_WIDTH)
+		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
+
+
+	dynamicProperties.select('.top')
+		.attr('x', d => .5 * (d.bounds.get(0, 0) + d.bounds.get(1, 0)) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('y', d =>  d.bounds.get(0, 1) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('width', d => RESIZE_CONTROL_WIDTH)
+		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
+
+	dynamicProperties.select('.bottom')
+		.attr('x', d => .5 * (d.bounds.get(0, 0) + d.bounds.get(1, 0)) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('y', d =>  d.bounds.get(1, 1) - RESIZE_CONTROL_WIDTH / 2)
+		.attr('width', d => RESIZE_CONTROL_WIDTH)
+		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
+
+
+	dynamicProperties.select('.tag')
+		.attr('x', d => d.bounds.slice(null, [0, 1]).min())
+		.attr('y', d => d.bounds.slice(null, [1, 2]).min() - 10)
+		.text(d => d.name);
+
+
+	dynamicProperties.select('.close')
+		.attr('x', d => d.bounds.slice(null, [0, 1]).max())
+		.attr('y', d => d.bounds.slice(null, [1, 2]).min() - 10);
+
+	match.exit().remove();
+
+
+// 		.attr("x", function(d) { return d.cx; })
+// 4.attr("y", function(d) { return d.cy; })
+// 5.text( function (d) { return "( " + d.cx + ", " + d.cy +" )"; })
+// 6.attr("font-family", "sans-serif")
+// 7.attr("font-size", "20px")
+// 8.attr("fill", "red");
+
+}
+
+var newBoxIndex;
+
+var newBoxDrag = d3.drag()
+	.on("start", function() {
+		newBoxIndex = boxes.length;
+
+		var p = nj.array([d3.event.x, d3.event.y])
+
+		boxes.push({
+			name: tags[selectedTag],
+			bounds: nj.stack([p, p])
+		})
+	})
+	.on("drag", function () {
+		resizeBottomRight(newBoxIndex, [d3.event.dx, d3.event.dy]);
+	}
+);
+
+d3.select('#imageContainer')
+	.append('svg:image')
+	.attr('class', 'image')
+	.attr("xlink:href", <%- JSON.stringify("image/" + imageSource + ".jpg")%>)
+	.attr("x", "0")
+	.attr("y", "0")
+	.call(newBoxDrag)
+
+function render()
+{
+	console.log('render!');
+	boundingBoxes(d3.select('#imageContainer'), boxes);
+}
+
+render();
+
+
+</script>
+
+</body>
+</html>
