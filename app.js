@@ -265,11 +265,14 @@ app.get('/', function (req, res) {
   	return;
   }
 
+  var dimensions = sizeOf(config.imagePath + '/' + req.query.imageSource + '.jpg');
+
   loadBoxesFromAnnotation(req.query.imageSource, function(boxes) {
 	res.render('index', {
 		imageSource: req.query.imageSource,
 		tags: getTags(),
-		boxes: boxes
+		boxes: boxes,
+		imageDimensions: [dimensions.width, dimensions.height]
 	})
   })
 })

@@ -43,10 +43,18 @@
 	<input id="toggle-default-accept-predictions" type="checkbox"></input>
 
 <script>
+var IMAGE_AREA = [800, 600]
+var imageDimensions = <%- JSON.stringify(imageDimensions) %>
 
 var tags = <%- JSON.stringify(tags) %>
 var selectedTag = 0;
 var selectedBox = -1;
+
+
+var widthScale =  IMAGE_AREA[0] / imageDimensions[0]
+var heightScale = IMAGE_AREA[1] / imageDimensions[1]
+
+var scale = Math.min(widthScale, heightScale)
 
 tags.map((name, i) => {
 	var option = document.createElement('option')
@@ -462,7 +470,7 @@ function boundingBoxes(mountNode, boundingBoxes)
 		.attr('stroke', (d, i) => i == selectedBox ? "blue" :
 			(d.isPrediction ? "red" : "black"));
 
-	var RESIZE_CONTROL_WIDTH = 5;
+	var RESIZE_CONTROL_WIDTH = 5 / scale;
 	dynamicProperties.select('.topLeft')
 		.attr('x', d => d.bounds.get(0, 0) - RESIZE_CONTROL_WIDTH / 2)
 		.attr('y', d => d.bounds.get(0, 1) - RESIZE_CONTROL_WIDTH / 2)
@@ -547,17 +555,20 @@ var newBoxDrag = d3.drag()
 );
 
 d3.select('#imageContainer')
-	.append('svg:image')
-	.attr('class', 'image')
-	.attr("xlink:href", <%- JSON.stringify("image/" + imageSource + ".jpg")%>)
-	.attr("x", "0")
-	.attr("y", "0")
-	.call(newBoxDrag)
+	.append('g')
+		.attr('id', 'scaledImageContainer')
+		.attr('transform', 'scale(' + scale + ', ' + scale + ')')
+		.append('svg:image')
+			.attr('class', 'image')
+			.attr("xlink:href", <%- JSON.stringify("image/" + imageSource + ".jpg")%>)
+			.attr("x", "0")
+			.attr("y", "0")
+			.call(newBoxDrag)
 
 function render()
 {
 	console.log('render!');
-	boundingBoxes(d3.select('#imageContainer'), boxes);
+	boundingBoxes(d3.select('#scaledImageContainer'), boxes);
 }
 
 render();
