@@ -8,7 +8,6 @@ var app = express()
 var xml2js = require('xml2js')
 var sizeOf = require('image-size');
 
-var port = 5555
 
 app.set('view engine', 'ejs')
 app.set('views', './views')
@@ -155,13 +154,17 @@ function parsedAnnotationToBoxes(parsedContents)
 
 function requestPrediction(imageFilePath, callback)
 {
-	if(config.predictionApi === '' || config.predictionApi === undefined)
+	console.log('requesting prediction for: ' + imageFilePath)
+	if(config.predictionApi === '' || config.predictionApi === undefined || config.predictionApi === null)
 	{
+		console.log('no prediction api available')
+
 		callback([]);
 		return;
 	}
 
 	var target = config.predictionApi;
+	console.log('target api at: ' + target)
 
 	var rs = fs.createReadStream(imageFilePath);
 	var ws = request.post(target, function(error, response, body) {
@@ -191,8 +194,11 @@ function requestPrediction(imageFilePath, callback)
 	ws.on('error', function (err) {
 		console.error('cannot send file to ' + target + ': ' + err);
 	});
+	console.log('commencing file pipe stream')
 
 	rs.pipe(ws);
+	console.log('returning control to event queue')
+
 }
 
 function mockPrediction()
@@ -292,4 +298,4 @@ app.post('/mockPrediction', function (req, res) {
 
 
 
-app.listen(port, () => console.log(`Annotation app listening on port ${port}!`))
+app.listen(config.port, () => console.log(`Annotation app listening on port ${config.port}!`))

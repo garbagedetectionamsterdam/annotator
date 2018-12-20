@@ -4,25 +4,34 @@
 <style>
 #imageContainer {
 	width: 800px;
-	height: 500px;
+	height: 600px;
 }
 
 .resizer {
-	fill: 'black';
-	stroke: 'black';
+	fill: white;
+	stroke: black;
+	paint-order: stroke;
+
 }
 
 .outline {
-	stroke-width: 2px;
 	fill-opacity: 0;
 }
 
 .close {
-	font-family:"helvetica";
-	font-size:"20px";
-	fill:"black";
+	font-family:"Lucida Console";
+	fill: white;
+	stroke: black;
+	paint-order:stroke;
 }
 
+.tag {
+	font-family:"Lucida Console";
+
+	fill: white;
+	stroke: black;
+	paint-order: stroke;
+}
 
 </style>
 <script src="https://d3js.org/d3.v5.min.js"></script>
@@ -103,7 +112,27 @@ function nextTag()
 
 	document.getElementById('current-tag').value = tags[selectedTag]
 }
+function fitBoundingBoxInImage(box)
+{
+	if(box.bounds.get(0, 0) < 0 ) box.bounds.set(0, 0, 0)
+	if(box.bounds.get(1, 0) < 0 ) box.bounds.set(1, 0, 0)
 
+	if(box.bounds.get(0, 1) < 0 ) box.bounds.set(0, 1, 0)
+	if(box.bounds.get(1, 1) < 0 ) box.bounds.set(1, 1, 0)
+
+	if(box.bounds.get(0, 0) >= imageDimensions[0] ) box.bounds.set(0, 0, imageDimensions[0] - 1)
+	if(box.bounds.get(1, 0) >= imageDimensions[0] ) box.bounds.set(1, 0, imageDimensions[0] - 1)
+
+	if(box.bounds.get(0, 1) >= imageDimensions[1] ) box.bounds.set(0, 1, imageDimensions[1] - 1)
+	if(box.bounds.get(1, 1) >= imageDimensions[1] ) box.bounds.set(1, 1, imageDimensions[1] - 1)
+
+	return box
+}
+
+function isBoxWithArea(box)
+{
+	return (box.bounds.get(0, 0) !== box.bounds.get(1, 0)) && (box.bounds.get(0, 1) !== box.bounds.get(1, 1))
+}
 
 function submitAnnotation(callback)
 {
@@ -113,11 +142,13 @@ function submitAnnotation(callback)
 		type: 'post',
 		data: JSON.stringify({annotation: {
 		fileBase: <%- JSON.stringify(imageSource)%>,
-		objects: boxes.map(x => {
-			return {
-				name: x.name,
-				bounds: x.bounds.tolist()
-			}
+		objects: boxes.map(fitBoundingBoxInImage)
+				.filter(isBoxWithArea)
+				.map(x => {
+					return {
+						name: x.name,
+						bounds: x.bounds.tolist()
+					}
 		})
 
 		}}),
@@ -462,11 +493,15 @@ function boundingBoxes(mountNode, boundingBoxes)
 
 	var dynamicProperties = match.merge(boxEnter);
 
+	var strokeWidth = 4 / scale;
+	var resizerStrokeWidth = strokeWidth / 1.25;
+
 	dynamicProperties.select('.outline')
 		.attr('x', d => d.bounds.slice(null, [0, 1]).min())
 		.attr('y', d => d.bounds.slice(null, [1, 2]).min())
 		.attr('width', d => Math.abs(d.bounds.get(0, 0) - d.bounds.get(1, 0)))
 		.attr('height', d =>  Math.abs(d.bounds.get(0, 1) - d.bounds.get(1, 1)))
+		.style('stroke-width', strokeWidth / 2)
 		.attr('stroke', (d, i) => i == selectedBox ? "blue" :
 			(d.isPrediction ? "red" : "black"));
 
@@ -474,24 +509,28 @@ function boundingBoxes(mountNode, boundingBoxes)
 	dynamicProperties.select('.topLeft')
 		.attr('x', d => d.bounds.get(0, 0) - RESIZE_CONTROL_WIDTH / 2)
 		.attr('y', d => d.bounds.get(0, 1) - RESIZE_CONTROL_WIDTH / 2)
+		.style('stroke-width', resizerStrokeWidth)
 		.attr('width', d => RESIZE_CONTROL_WIDTH)
 		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
 
 	dynamicProperties.select('.topRight')
 		.attr('x', d => d.bounds.get(1, 0) - RESIZE_CONTROL_WIDTH / 2)
 		.attr('y', d => d.bounds.get(0, 1) - RESIZE_CONTROL_WIDTH / 2)
+		.style('stroke-width', resizerStrokeWidth)
 		.attr('width', d => RESIZE_CONTROL_WIDTH)
 		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
 
 	dynamicProperties.select('.bottomRight')
 		.attr('x', d => d.bounds.get(1, 0) - RESIZE_CONTROL_WIDTH / 2)
 		.attr('y', d => d.bounds.get(1, 1) - RESIZE_CONTROL_WIDTH / 2)
+		.style('stroke-width', resizerStrokeWidth)
 		.attr('width', d => RESIZE_CONTROL_WIDTH)
 		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
 
 	dynamicProperties.select('.bottomLeft')
 		.attr('x', d => d.bounds.get(0, 0) - RESIZE_CONTROL_WIDTH / 2)
 		.attr('y', d => d.bounds.get(1, 1) - RESIZE_CONTROL_WIDTH / 2)
+		.style('stroke-width', resizerStrokeWidth)
 		.attr('width', d => RESIZE_CONTROL_WIDTH)
 		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
 
@@ -499,12 +538,14 @@ function boundingBoxes(mountNode, boundingBoxes)
 	dynamicProperties.select('.right')
 		.attr('x', d => d.bounds.get(1, 0) - RESIZE_CONTROL_WIDTH / 2)
 		.attr('y', d => .5 * (d.bounds.get(0, 1) + d.bounds.get(1, 1)) - RESIZE_CONTROL_WIDTH / 2)
+		.style('stroke-width', resizerStrokeWidth)
 		.attr('width', d => RESIZE_CONTROL_WIDTH)
 		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
 
 	dynamicProperties.select('.left')
 		.attr('x', d => d.bounds.get(0, 0) - RESIZE_CONTROL_WIDTH / 2)
 		.attr('y', d => .5 * (d.bounds.get(0, 1) + d.bounds.get(1, 1)) - RESIZE_CONTROL_WIDTH / 2)
+		.style('stroke-width', resizerStrokeWidth)
 		.attr('width', d => RESIZE_CONTROL_WIDTH)
 		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
 
@@ -512,25 +553,32 @@ function boundingBoxes(mountNode, boundingBoxes)
 	dynamicProperties.select('.top')
 		.attr('x', d => .5 * (d.bounds.get(0, 0) + d.bounds.get(1, 0)) - RESIZE_CONTROL_WIDTH / 2)
 		.attr('y', d =>  d.bounds.get(0, 1) - RESIZE_CONTROL_WIDTH / 2)
+		.style('stroke-width', resizerStrokeWidth)
 		.attr('width', d => RESIZE_CONTROL_WIDTH)
 		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
 
 	dynamicProperties.select('.bottom')
 		.attr('x', d => .5 * (d.bounds.get(0, 0) + d.bounds.get(1, 0)) - RESIZE_CONTROL_WIDTH / 2)
 		.attr('y', d =>  d.bounds.get(1, 1) - RESIZE_CONTROL_WIDTH / 2)
+		.style('stroke-width', resizerStrokeWidth)
 		.attr('width', d => RESIZE_CONTROL_WIDTH)
 		.attr('height', d =>  RESIZE_CONTROL_WIDTH);
 
+	var fontSize = 13 / scale;
 
 	dynamicProperties.select('.tag')
+		.style('font-size', fontSize)
+		.style('stroke-width', strokeWidth)
 		.attr('x', d => d.bounds.slice(null, [0, 1]).min())
-		.attr('y', d => d.bounds.slice(null, [1, 2]).min() - 10)
+		.attr('y', d => d.bounds.slice(null, [1, 2]).min() - fontSize)
 		.text(d => d.name);
 
 
 	dynamicProperties.select('.close')
+		.style('font-size', fontSize)
+		.style('stroke-width', strokeWidth)
 		.attr('x', d => d.bounds.slice(null, [0, 1]).max())
-		.attr('y', d => d.bounds.slice(null, [1, 2]).min() - 10);
+		.attr('y', d => d.bounds.slice(null, [1, 2]).min() - fontSize);
 
 	match.exit().remove();
 
