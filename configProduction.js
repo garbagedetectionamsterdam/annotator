@@ -3,5 +3,5 @@ module.exports = {
 	imagePath: '/mnt/nfs/projects/trash_recognition/data/examples/images/',
 	annotationPath: '/mnt/nfs/projects/trash_recognition/data/examples/annotations/xmls/',
 	predictionApi: 'http://63.33.53.68:5000/predict',
-	port: 80
+	port: 8080
 }
