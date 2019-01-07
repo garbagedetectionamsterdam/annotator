@@ -19,6 +19,16 @@ module.exports = {
 node app.js
 ```
 
+## Running the code with docker
+```
+./startDocker.sh
+```
+
+## Building the docker container
+```
+./buildDocker.sh
+```
+
 ## Manual
 
 
